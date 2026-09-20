@@ -42,6 +42,8 @@ FinanceAPI 是面向个人投资者的纯后端 API 服务，覆盖投资组合�
 | Portfolio | GET/POST | `/api/portfolios` | 列表、创建 |
 | Portfolio | GET/PUT/DELETE | `/api/portfolios/:id` | 详情、编辑、删除 |
 | Portfolio | GET | `/api/portfolios/:id/performance` | 收益统计 |
+| Snapshot | POST | `/api/portfolios/:id/snapshots` | 创建组合估值快照（`clientRequestId` 幂等） |
+| Snapshot | GET | `/api/portfolios/:id/snapshots` | 回读历史估值快照列表 |
 | Holding | GET/POST | `/api/portfolios/:portfolioId/holdings` | 组合持仓 |
 | Holding | GET/DELETE | `/api/holdings/:id` | 持仓详情、删除 |
 | Transaction | GET/POST | `/api/holdings/:holdingId/transactions` | 持仓交易 |
@@ -52,6 +54,22 @@ FinanceAPI 是面向个人投资者的纯后端 API 服务，覆盖投资组合�
 | Market | GET | `/api/market/trending` | 热门资产 |
 | Review | GET/POST | `/api/portfolios/:portfolioId/reviews` | 复盘列表、创建 |
 | Review | PUT/DELETE | `/api/reviews/:id` | 编辑、删除复盘 |
+
+### 组合估值快照
+
+`POST /api/portfolios/:id/snapshots` 通过请求体 `clientRequestId` 实现幂等：
+
+- 创建时冻结当时的**持仓**（数量、成本、现价、市值）、**行情**（资产名、价格、涨跌、更新时间）和**总市值**。
+- 标的权重保留**四位小数**，按最大余额法分配，末项吸收全部舍入差，合计恒为 `1.0000`。
+- 同一 `clientRequestId` 重试：同组合回读原快照；换组合返回 `409 Conflict`；并发首次请求只生成一张。
+- 任一持仓价格无效（行情缺失、非有限正数）或总市值非正时整次拒绝（`400`），**不留任何记录**。
+- 快照创建后即不可变（深冻结 + JSONB 落库），之后持仓或行情变化不影响历史快照，可通过 `GET /api/portfolios/:id/snapshots` 回读。
+
+```bash
+curl -X POST http://localhost:38505/api/portfolios/1/snapshots \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"clientRequestId":"req-7c31a2f9"}'
+```
 
 ## 枚举使用位置清单
 
